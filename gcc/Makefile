@@ -1,7 +1,7 @@
-INCLUDE_DIRS:= device/include cmsis/include ../include  
-SOURCE_DIRS:=  device/source ../source 
+INCLUDE_DIRS:= device/include cmsis/include ../include ../TivaWare
+SOURCE_DIRS:=  device/source ../source ../TivaWare/utils
 #the C files to compile
-CFILES:= system_TM4C123.c main.c
+CFILES:= system_TM4C123.c usb_bulk_structs.c usb_dev_bulk.c uartstdio.c ustdlib.c irq_defs.c
 #the assembly files assemble
 ASM_FILES:= startup_ARMCM4.S
 #the target microcontroller
@@ -12,16 +12,16 @@ CC=arm-none-eabi-gcc
 #The linker script for the microcontroller 
 LD_SCRIPTS:= gcc_arm.ld
 #the directories for linker files 
-LIB_DIRS:= device/
+LIB_DIRS:= device/ ../TivaWare/driverlib/gcc/ ../TivaWare/usblib/gcc/
 #the libraries to link 
-LIB_NAMES:=
-#the lirabrary file name
+LIB_NAMES:=usb driver
+#the library file name
 LIB_FILE_NAMES:= $(patsubst %,lib%.a,$(LIB_NAMES))
 #linker flags 
 LFLAGS:= $(patsubst %,-L%,$(LIB_DIRS)) $(patsubst %,-l%,$(LIB_NAMES)) -T$(LD_SCRIPTS) 
 #PREPROCESSOR OPTIONS
 #Define macro for all files
-DEFINES:= USE_STDPERIPH_DRIVER
+DEFINES:= gcc PART_TM4C123GH6PM TARGET_IS_BLIZZARD_RB1 UART_BUFFERED
 DEFINE_FLAGS:=$(patsubst %,-D%,$(DEFINES))
 INCLUDE_FLAGS:=$(patsubst %,-I%,$(INCLUDE_DIRS)) 
 CFLAGS= -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -std=c99 -Wall -g -ffunction-sections -fdata-sections 
