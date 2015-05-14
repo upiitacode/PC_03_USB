@@ -44,5 +44,11 @@ $(DIRS): %:
 	mkdir -p $@
 
 clean:
-	rm -fr $(DIRS);
-	rm $(TARGET_NAME);
+	rm -fr $(DIRS)
+	rm -fr $(TARGET_NAME)
+
+#set a udev rules to allow device access without sudo
+#RUN THIS TARGET AS SUDO
+loadRules:
+	echo 'ATTRS{idVendor}=="1cbe", ATTRS{idProduct}=="0003", MODE="664", GROUP="plugdev"' > /etc/udev/rules.d/98-tiva.rules
+	sudo udevadm control --reload-rules
