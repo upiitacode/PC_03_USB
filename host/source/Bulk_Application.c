@@ -2,13 +2,13 @@
 #include <string.h>
 #include <libusb.h>
 
-#define BUFFER_SIZE 128
-
+#define OUT_BUFFER_SIZE 64
+#define IN_BUFFER_SIZE 64
 int main() {
-	char buff_in[BUFFER_SIZE];
-	char buff_out[BUFFER_SIZE];
+	char buff_in[IN_BUFFER_SIZE];
+	char buff_out[OUT_BUFFER_SIZE];
 	int dwlen_out;
-	int dwlen_in = BUFFER_SIZE;
+	int dwlen_in = IN_BUFFER_SIZE;
 	int pdwlen_out;
 	int pdwlen_in;
 	libusb_context *ctx = NULL; //context =default
@@ -24,7 +24,7 @@ int main() {
 			printf("device is open. handle = %p\n", myHandle);
 			libusb_claim_interface(myHandle, 0);
 			printf("Enter String: ");
-			fgets(buff_out,BUFFER_SIZE,stdin);
+			fgets(buff_out,OUT_BUFFER_SIZE,stdin);
 			dwlen_out = strlen(buff_out) + 1; //size of string to send
 			//write and read operations
 			opFailed = libusb_bulk_transfer(myHandle, 0x01, (unsigned char *) buff_out, dwlen_out, &pdwlen_out, 1000);
