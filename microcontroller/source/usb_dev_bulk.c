@@ -24,6 +24,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include "inc/hw_ints.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_types.h"
@@ -173,139 +175,7 @@ SysTickIntHandler(void)
     g_ui32SysTickCount++;
 }
 
-//*****************************************************************************
-//
-// Receive new data and echo it back to the host.
-//
-// \param psDevice points to the instance data for the device whose data is to
-// be processed.
-// \param pui8Data points to the newly received data in the USB receive buffer.
-// \param ui32NumBytes is the number of bytes of data available to be processed.
-//
-// This function is called whenever we receive a notification that data is
-// available from the host. We read the data, byte-by-byte and swap the case
-// of any alphabetical characters found then write it back out to be
-// transmitted back to the host.
-//
-// \return Returns the number of bytes of data processed.
-//
-//*****************************************************************************
-static uint32_t
-EchoNewDataToHost(tUSBDBulkDevice *psDevice, uint8_t *pui8Data,
-                  uint32_t ui32NumBytes)
-{
-    uint32_t ui32Loop, ui32Space, ui32Count;
-    uint32_t ui32ReadIndex;
-    uint32_t ui32WriteIndex;
-    tUSBRingBufObject sTxRing;
-
-    //
-    // Get the current buffer information to allow us to write directly to
-    // the transmit buffer (we already have enough information from the
-    // parameters to access the receive buffer directly).
-    //
-    USBBufferInfoGet(&g_sTxBuffer, &sTxRing);
-
-    //
-    // How much space is there in the transmit buffer?
-    //
-    ui32Space = USBBufferSpaceAvailable(&g_sTxBuffer);
-
-    //
-    // How many characters can we process this time round?
-    //
-    ui32Loop = (ui32Space < ui32NumBytes) ? ui32Space : ui32NumBytes;
-    ui32Count = ui32Loop;
-
-    //
-    // Update our receive counter.
-    //
-    g_ui32RxCount += ui32NumBytes;
-
-    //
-    // Dump a debug message.
-    //
-    DEBUG_PRINT("Received %d bytes\n", ui32NumBytes);
-
-    //
-    // Set up to process the characters by directly accessing the USB buffers.
-    //
-    ui32ReadIndex = (uint32_t)(pui8Data - g_pui8USBRxBuffer);
-    ui32WriteIndex = sTxRing.ui32WriteIndex;
-
-    while(ui32Loop)
-    {
-        //
-        // Copy from the receive buffer to the transmit buffer converting
-        // character case on the way.
-        //
-
-        //
-        // Is this a lower case character?
-        //
-        if((g_pui8USBRxBuffer[ui32ReadIndex] >= 'a') &&
-           (g_pui8USBRxBuffer[ui32ReadIndex] <= 'z'))
-        {
-            //
-            // Convert to upper case and write to the transmit buffer.
-            //
-            g_pui8USBTxBuffer[ui32WriteIndex] =
-                (g_pui8USBRxBuffer[ui32ReadIndex] - 'a') + 'A';
-        }
-        else
-        {
-            //
-            // Is this an upper case character?
-            //
-            if((g_pui8USBRxBuffer[ui32ReadIndex] >= 'A') &&
-               (g_pui8USBRxBuffer[ui32ReadIndex] <= 'Z'))
-            {
-                //
-                // Convert to lower case and write to the transmit buffer.
-                //
-                g_pui8USBTxBuffer[ui32WriteIndex] =
-                    (g_pui8USBRxBuffer[ui32ReadIndex] - 'Z') + 'z';
-            }
-            else
-            {
-                //
-                // Copy the received character to the transmit buffer.
-                //
-                g_pui8USBTxBuffer[ui32WriteIndex] =
-                        g_pui8USBRxBuffer[ui32ReadIndex];
-            }
-        }
-
-        //
-        // Move to the next character taking care to adjust the pointer for
-        // the buffer wrap if necessary.
-        //
-        ui32WriteIndex++;
-        ui32WriteIndex = (ui32WriteIndex == BULK_BUFFER_SIZE) ?
-                         0 : ui32WriteIndex;
-
-        ui32ReadIndex++;
-        ui32ReadIndex = (ui32ReadIndex == BULK_BUFFER_SIZE) ?
-                        0 : ui32ReadIndex;
-
-        ui32Loop--;
-    }
-
-    //
-    // We've processed the data in place so now send the processed data
-    // back to the host.
-    //
-    USBBufferDataWritten(&g_sTxBuffer, ui32Count);
-
-    DEBUG_PRINT("Wrote %d bytes\n", ui32Count);
-
-    //
-    // We processed as much data as we can directly from the receive buffer so
-    // we need to return the number of bytes to allow the lower layer to
-    // update its read pointer appropriately.
-    //
-    return(ui32Count);
-}
+int txReady=1;
 
 //*****************************************************************************
 //
@@ -335,6 +205,7 @@ TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue,
     if(ui32Event == USB_EVENT_TX_COMPLETE)
     {
         g_ui32TxCount += ui32MsgValue;
+		txReady=0;
     }
 
     //
@@ -345,6 +216,10 @@ TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue,
     return(0);
 }
 
+void * myBulk;
+unsigned char myInBuffer[256];
+int rxReady=0;
+int readBytes=0;
 //*****************************************************************************
 //
 // Handles bulk driver notifications related to the receive channel (data from
@@ -403,18 +278,22 @@ RxHandler(void *pvCBData, uint32_t ui32Event,
         //
         case USB_EVENT_RX_AVAILABLE:
         {
-            tUSBDBulkDevice *psDevice;
-
             //
             // Get a pointer to our instance data from the callback data
             // parameter.
             //
-            psDevice = (tUSBDBulkDevice *)pvCBData;
-
-            //
-            // Read the new packet and echo it back to the host.
-            //
-            return(EchoNewDataToHost(psDevice, pvMsgData, ui32MsgValue));
+			
+			//UARTprintf("pvCBData %p\n",pvCBData);
+			//UARTprintf("message value %d\n",ui32MsgValue);
+		
+			memcpy(myInBuffer,pvMsgData,ui32MsgValue);
+			readBytes=ui32MsgValue;
+			rxReady=1;
+			//
+			// Read the new packet and echo it back to the host.
+			//
+			return ui32MsgValue;
+			
         }
 
         //
@@ -482,9 +361,6 @@ ConfigureUART(void)
 int
 main(void)
 {
-    volatile uint32_t ui32Loop;
-    uint32_t ui32TxCount;
-    uint32_t ui32RxCount;
 
     //
     // Enable lazy stacking for interrupt handlers.  This allows floating-point
@@ -507,7 +383,7 @@ main(void)
     //
     // Enable the GPIO pins for the LED (PF2 & PF3).
     //
-    ROM_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3 | GPIO_PIN_2);
+    ROM_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3 | GPIO_PIN_2 | GPIO_PIN_1);
 
     //
     // Open UART0 and show the application name on the UART.
@@ -556,7 +432,7 @@ main(void)
     // Pass our device information to the USB library and place the device
     // on the bus.
     //
-    USBDBulkInit(0, &g_sBulkDevice);
+    myBulk=USBDBulkInit(0, &g_sBulkDevice);
 
     //
     // Wait for initial configuration to complete.
@@ -566,79 +442,53 @@ main(void)
     //
     // Clear our local byte counters.
     //
-    ui32RxCount = 0;
-    ui32TxCount = 0;
 
     //
     // Main application loop.
     //
     while(1)
     {
-        //
-        // See if any data has been transferred.
-        //
-        if((ui32TxCount != g_ui32TxCount) || (ui32RxCount != g_ui32RxCount))
-        {
-            //
-            // Has there been any transmit traffic since we last checked?
-            //
-            if(ui32TxCount != g_ui32TxCount)
-            {
-                //
-                // Turn on the Green LED.
-                //
-                GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3);
-
-                //
-                // Delay for a bit.
-                //
-                for(ui32Loop = 0; ui32Loop < 150000; ui32Loop++)
-                {
-                }
-
-                //
-                // Turn off the Green LED.
-                //
-                GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0);
-
-                //
-                // Take a snapshot of the latest transmit count.
-                //
-                ui32TxCount = g_ui32TxCount;
-            }
-
-            //
-            // Has there been any receive traffic since we last checked?
-            //
-            if(ui32RxCount != g_ui32RxCount)
-            {
-                //
-                // Turn on the Blue LED.
-                //
-                GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, GPIO_PIN_2);
-
-                //
-                // Delay for a bit.
-                //
-                for(ui32Loop = 0; ui32Loop < 150000; ui32Loop++)
-                {
-                }
-
-                //
-                // Turn off the Blue LED.
-                //
-                GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, 0);
-
-                //
-                // Take a snapshot of the latest receive count.
-                //
-                ui32RxCount = g_ui32RxCount;
-            }
-
-            //
-            // Update the display of bytes transferred.
-            //
-            UARTprintf("\rTx: %d  Rx: %d", ui32TxCount, ui32RxCount);
-        }
+		if(rxReady==1){
+			UARTprintf("main: Available data %d\n",readBytes);
+			USBDBulkPacketWrite(myBulk,myInBuffer,readBytes,true);
+			rxReady=0;
+		}else{
+			for(int i=0; i<readBytes; i++){
+				char newColor;
+				char colorMask; 
+				colorMask=GPIO_PIN_3 | GPIO_PIN_2 | GPIO_PIN_1;
+				newColor=0;
+				switch(myInBuffer[i]){
+					case 'r':
+						newColor|=GPIO_PIN_1;
+						break;
+					case 'g':
+						newColor|=GPIO_PIN_3;
+						break;
+					case 'b':
+						newColor|=GPIO_PIN_2;
+						break;
+					case 'c':
+						newColor|=GPIO_PIN_3|GPIO_PIN_2;
+						break;
+					case 'm':
+						newColor|=GPIO_PIN_2|GPIO_PIN_1;
+						break;	
+					case 'a':
+						newColor|=GPIO_PIN_3|GPIO_PIN_1;
+						break;
+					case 'B':
+						newColor=0;
+						break;	
+					case 'W':
+						newColor|=GPIO_PIN_3|GPIO_PIN_2|GPIO_PIN_1;
+						break;
+					default:
+						colorMask=0;
+						break;
+				}
+				if(colorMask) GPIOPinWrite(GPIO_PORTF_BASE, colorMask, newColor);
+			}
+		}
     }
 }
