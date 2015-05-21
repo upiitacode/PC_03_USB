@@ -27,7 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "inc/hw_ints.h"
-#include "inc/hw_memmap.h"
+//#include "inc/hw_memmap.h"
 #include "inc/hw_types.h"
 #include "driverlib/debug.h"
 #include "driverlib/fpu.h"
@@ -353,15 +353,60 @@ ConfigureUART(void)
     UARTStdioConfig(0, 115200, 16000000);
 }
 
+// DMA ADC variable and fucntion declarations
+
+void config_ADC(void);
+void start_ADC(void);
+void stop_ADC(void);
+
+
+short ADC_samples[1024];
+char trasferData[64] __attribute__((aligned(2)));
+int DMA_CH14_Transfers=0;
+int dmaTransferComplete=1;
+int uartTrasferComplete=1;
+
+
+void config_DMA(void);
+void reloadDMA_DMA_Chanel14(void);
+
+
+typedef struct {
+  void * sourceEndPointer;
+	void * destinationEndPointer;
+  unsigned int controlWord;
+	unsigned int unused;
+} CHControlStruct;
+
+typedef struct {
+  CHControlStruct primary[32];
+	CHControlStruct alternate[32];
+} DMAControlStruct;
+
+DMAControlStruct myControlStruct __attribute__((aligned(1024)));
+ 
+void startUART_Transfer(void);
+
+
 //*****************************************************************************
 //
 // This is the main application entry function.
 //
 //*****************************************************************************
-int
-main(void)
-{
 
+void config_sal(void);
+int main(void)
+{
+	  volatile uint32_t ui32Loop;
+    uint32_t ui32TxCount;
+    uint32_t ui32RxCount;
+		int myCounter =0;
+		void * myBulk;
+	 
+	
+		
+
+	
     //
     // Enable lazy stacking for interrupt handlers.  This allows floating-point
     // instructions to be used within interrupt handlers, but at the expense of
@@ -383,16 +428,19 @@ main(void)
     //
     // Enable the GPIO pins for the LED (PF2 & PF3).
     //
-    ROM_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3 | GPIO_PIN_2 | GPIO_PIN_1);
+    ROM_GPIOPinTypeGPIOOutput(GPIOF_BASE, GPIO_PIN_3 | GPIO_PIN_2);
 
     //
     // Open UART0 and show the application name on the UART.
     //
     ConfigureUART();
-
+		
+	
     UARTprintf("\033[2JTiva C Series USB bulk device example\n");
     UARTprintf("---------------------------------\n\n");
-
+		
+		
+	
     //
     // Not configured initially.
     //
@@ -403,19 +451,13 @@ main(void)
     // pins.
     //
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
-    ROM_GPIOPinTypeUSBAnalog(GPIO_PORTD_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+    ROM_GPIOPinTypeUSBAnalog(GPIOD_BASE, GPIO_PIN_4 | GPIO_PIN_5);
 
-    //
-    // Enable the system tick.
-    //
-    ROM_SysTickPeriodSet(ROM_SysCtlClockGet() / SYSTICKS_PER_SECOND);
-    ROM_SysTickIntEnable();
-    ROM_SysTickEnable();
 
     //
     // Tell the user what we are up to.
     //
-    UARTprintf("Configuring USB\n");
+		UARTprintf("Configuring USB\n");
 
     //
     // Initialize the transmit and receive buffers.
@@ -442,53 +484,168 @@ main(void)
     //
     // Clear our local byte counters.
     //
+    ui32RxCount = 0;
+    ui32TxCount = 0;
 
     //
     // Main application loop.
     //
+		
+	  config_ADC();
+		config_DMA();
+		config_sal();
+	  NVIC_EnableIRQ(ADC0SS0_IRQn);//the DMA asserts this interrupt when transfer complete
+		
+		
+		 
+		stop_ADC(); 
+		int itemsToPacket=32;
     while(1)
     {
-		if(rxReady==1){
-			UARTprintf("main: Available data %d\n",readBytes);
-			USBDBulkPacketWrite(myBulk,myInBuffer,readBytes,true);
-			rxReady=0;
-		}else{
-			for(int i=0; i<readBytes; i++){
-				char newColor;
-				char colorMask; 
-				colorMask=GPIO_PIN_3 | GPIO_PIN_2 | GPIO_PIN_1;
-				newColor=0;
-				switch(myInBuffer[i]){
-					case 'r':
-						newColor|=GPIO_PIN_1;
-						break;
-					case 'g':
-						newColor|=GPIO_PIN_3;
-						break;
-					case 'b':
-						newColor|=GPIO_PIN_2;
-						break;
-					case 'c':
-						newColor|=GPIO_PIN_3|GPIO_PIN_2;
-						break;
-					case 'm':
-						newColor|=GPIO_PIN_2|GPIO_PIN_1;
-						break;	
-					case 'a':
-						newColor|=GPIO_PIN_3|GPIO_PIN_1;
-						break;
-					case 'B':
-						newColor=0;
-						break;	
-					case 'W':
-						newColor|=GPIO_PIN_3|GPIO_PIN_2|GPIO_PIN_1;
-						break;
-					default:
-						colorMask=0;
-						break;
+			if((usbReady!=0)){	
+				reloadDMA_DMA_Chanel14();
+				dmaTransferComplete=0;
+				start_ADC(); 
+				while(!dmaTransferComplete);
+				
+				UARTprintf("Transfer start\n");
+				GPIOB->DATA|=(0x1<<0);
+				for(int index=0;index<32;index++){
+					for(int j=0;j<itemsToPacket;j++){
+						trasferComplete=0;
+					  ((short*)&trasferData)[j]=ADC_samples[(index*itemsToPacket)+j];
+					}
+						USBDBulkPacketWrite(myBulk,(unsigned char *)trasferData,itemsToPacket*2,true);
+						while(!trasferComplete);
 				}
-				if(colorMask) GPIOPinWrite(GPIO_PORTF_BASE, colorMask, newColor);
+				UARTprintf("Transfer complete %d\n",DMA_CH14_Transfers);
+				GPIOB->DATA&=~(0x1<<0);// saca un  0 en PC5
+				stop_ADC();
 			}
-		}
     }
+}
+
+void startUART_Transfer(void){
+	int i;
+	char tempCharBuffer[80];
+	for(i=0;i<1024;i++){
+		UARTprintf("DATA[%d]=%d\n",i,ADC_samples[i]);
+		SysCtlDelay(10000);
+	}
+	UARTprintf("Transfer complete\n");
+	UARTprintf("Total DMA trasfers: %d\n",DMA_CH14_Transfers);
+	UARTprintf("Press enter to continue\n");
+	UARTgets(tempCharBuffer,80);
+	uartTrasferComplete=1;
+}
+
+
+void config_DMA(){
+	//Module Initialization
+	SYSCTL->RCGCDMA|=0x1;//enable DMA peripherial
+	UDMA->CFG=0x0;//Disables DMA controller
+	myControlStruct.primary[14].sourceEndPointer=(void *)0x40038048;
+	myControlStruct.primary[14].destinationEndPointer=(void *)&ADC_samples[1023];
+	myControlStruct.primary[14].controlWord=(0x1<<30)|//Destination increment:Half-word
+																					(0x1<<28)|//Destination Data Size:Half-Word
+																					(0x3<<26)|//Source address increment:	No increment						
+																					(0x1<<24)|//Source Data Size:Half-Word
+																					(0x2<<14)|//Arbitration Size 4 Trasfers
+																					(1023<<4)|//Trasfers Size 1024 //reg =(n-1)
+																					(0x1<<0);//Transfer Mode Basic
+	UDMA->CTLBASE=(int)&myControlStruct;//pointer to base of DMA Control Structure
+	//Configure Channel 14  Map Select 0 = ADC0 SS0
+	UDMA->ALTCLR|=(0x1<<14);//use primary control structure
+	UDMA->USEBURSTSET|=(0x1<<14);//channel 14 responds onnly to burst requests
+	UDMA->REQMASKCLR|=(0x1<<14);
+	UDMA->CHMAP1|=(0x0<<24);
+	
+	UDMA->ENASET|=(0x1<<14);//Enable Chanel
+	UDMA->CFG=0x1;//Enables DMA controller
+}
+
+void reloadDMA_DMA_Chanel14(){
+	//Module Initialization
+	UDMA->ENACLR|=(0x1<<14);
+	myControlStruct.primary[14].controlWord=(0x1<<30)|//Destination increment:Half-word
+																					(0x1<<28)|//Destination Data Size:Half-Word
+																					(0x3<<26)|//Source address increment:	No increment						
+																					(0x1<<24)|//Source Data Size:Half-Word
+																					(0x2<<14)|//Arbitration Size 4 Trasfers
+																					(1023<<4)|//Trasfers Size 1024 //reg =(n-1)
+																					(0x1<<0);//Transfer Mode Basic
+	//UDMA->USEBURSTSET|=(0x1<<14);//channel 14 responds onnly to burst requests
+	//UDMA->REQMASKCLR|=(0x1<<14);
+	//UDMA->CHMAP1|=(0x0<<24);
+	UDMA->ENASET|=(0x1<<14);//Enable Chanel
+}
+
+void start_ADC(void){
+	ADC0->ACTSS|=(0x01);
+	ADC0->PSSI=(0x1<<0);//inicia secuenciador 0
+	//ADC_sampleEnd=0;
+}
+
+void stop_ADC(void){
+	int dummie;
+	while(!(ADC0->SSFSTAT0&(0x1<<8))) dummie=ADC0->SSFIFO0;
+	ADC0->ACTSS&=~((int)0x01);//disable sequencer
+	ADC0->DCISC=0x1;//clear interrupts
+
+}
+
+void config_ADC(){
+	/*Configuracion de Pines*/
+	
+	SYSCTL->RCGCGPIO|=(0x1<<4)|(0x1<<1)|(0x1<<3);
+	SYSCTL->RCGCADC|=0x01;//habilitamos ADC0
+	// Puertos Analogicos en E4 E5 B4 B5
+	GPIOE->DEN&=~((0x1<<4)|(0x1<<5));
+	GPIOB->DEN&=~((0x1<<4)|(0x1<<5));
+	GPIOE->AMSEL|=(0x1<<4)|(0x1<<5);
+	GPIOB->AMSEL|=(0x1<<4)|(0x1<<5);
+	
+	
+	//Configuracion ADC principal
+	
+	ADC0->ACTSS&=~(0xF);//desactivamos secuenciadores durantes la configuracion
+	ADC0->EMUX=0xF; //para trigger por sofware always(continuos sample) 
+	//ADC0->CTL|=(0x1<<6);//dither mode enable
+	//ADC0->SAC|=(0x3);// x8 averaging
+	//Configuracion del sequenciador
+	ADC0->SSMUX0=(0x8)|(0x8<<4)|(0x8<<8)|(0x8<<12)|(0x8<<16)|(0x8<<20)|(0x8<<24)|(0x8<<28);//(0x8)|(0x9<<4)|(0xA<<8)|(0xB<<12)|(0x8<<16)|(0x9<<20)|(0xA<<24)|(0xB<<28);
+	ADC0->SSCTL0=(0x1<<30)|(0x1<<29)|(0x1<<14);//Final de secuencia en muestra 3, y genera interrupcion
+	//Desenmacaramos interrupcion por secuenciador 0
+	//ADC0->IM|=(0x1<<0);
+	ADC0->ACTSS|=(0x1<<0);//activamos secuenciador 0
+}
+
+void ADC0SS0_Handler(){
+	
+		UDMA->CHIS|=(0x1<<14);//clear interrupts caused by channel 14
+		//reloadDMA_DMA_Chanel14();
+	  dmaTransferComplete=1;
+		DMA_CH14_Transfers++;
+	  stop_ADC(); 
+}
+
+//extern void SysTickIntHandler(void);
+
+extern void USB0DeviceIntHandler(void);
+void USB0_Handler(void){
+	USB0DeviceIntHandler();
+}
+
+extern void UARTStdioIntHandler(void);
+void UART0_Handler(void){
+	UARTStdioIntHandler();
+}
+
+void config_sal(void){
+	SYSCTL->RCGCGPIO|=(0x1<<1)|(0x1<<5);// primero ver  los puertos a utilizar PUERTOC 
+	GPIOB->DEN|=(0x1<<0)|(0x1<<1)|(0x1<<2)|(0x1<<3);//habilitammos los puertos entreda o salida o funcion espesifica PC4 y PC5 PC6 y PC7 
+	GPIOB->DIR|=(0x1<<0)|(0x1<<1)|(0x1<<2)|(0x1<<3);//PC4,PC5,PC6,PC7" como salida ; ya salen cosas hay
+	//GPIOB->PUR|=(0x1<<0)|(0x1<<1)|(0x1<<2)|(0x1<<3);// habilitamos como pull up 
+	//GPIOF->DEN|=(0x1<<2)|(0x1<<3);//habilitammos los puertos entreda o salida o funcion espesifica PF2 y  PF3
+	//GPIOF->DIR|=(0x1<<2)|(0x1<<3);//PF2, PF3" como salida ; ya salen cosas hay 
 }
