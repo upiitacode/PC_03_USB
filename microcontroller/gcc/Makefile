@@ -1,7 +1,7 @@
 INCLUDE_DIRS:= device/include cmsis/include ../include ../TivaWare
 SOURCE_DIRS:=  device/source ../source ../TivaWare/utils
 #the C files to compile
-CFILES:= system_TM4C123.c usb_bulk_structs.c usb_dev_bulk.c uartstdio.c ustdlib.c irq_defs.c
+CFILES:= system_TM4C123.c usb_bulk_structs.c usb_dev_bulk.c uartstdio.c ustdlib.c irq_defs.c adc_dma.c
 #the assembly files assemble
 ASM_FILES:= startup_ARMCM4.S
 #the target microcontroller

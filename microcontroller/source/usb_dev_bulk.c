@@ -46,6 +46,7 @@
 #include "utils/uartstdio.h"
 #include "utils/ustdlib.h"
 #include "usb_bulk_structs.h"
+#include "adc_dma.h"
 
 //*****************************************************************************
 //
@@ -205,7 +206,7 @@ TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue,
     if(ui32Event == USB_EVENT_TX_COMPLETE)
     {
         g_ui32TxCount += ui32MsgValue;
-		txReady=0;
+		txReady=1;
     }
 
     //
@@ -216,8 +217,11 @@ TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue,
     return(0);
 }
 
+int isUSB_ready=0;
+
 void * myBulk;
 unsigned char myInBuffer[256];
+unsigned char myOutBuffer[64];
 int rxReady=0;
 int readBytes=0;
 //*****************************************************************************
@@ -259,7 +263,9 @@ RxHandler(void *pvCBData, uint32_t ui32Event,
             //
             USBBufferFlush(&g_sTxBuffer);
             USBBufferFlush(&g_sRxBuffer);
-
+			
+			isUSB_ready=1;
+			
             break;
         }
 
@@ -442,53 +448,21 @@ main(void)
     //
     // Clear our local byte counters.
     //
-
+	while(!isUSB_ready);
+	adc_cofig();
     //
     // Main application loop.
     //
     while(1)
-    {
-		if(rxReady==1){
-			UARTprintf("main: Available data %d\n",readBytes);
-			USBDBulkPacketWrite(myBulk,myInBuffer,readBytes,true);
-			rxReady=0;
-		}else{
-			for(int i=0; i<readBytes; i++){
-				char newColor;
-				char colorMask; 
-				colorMask=GPIO_PIN_3 | GPIO_PIN_2 | GPIO_PIN_1;
-				newColor=0;
-				switch(myInBuffer[i]){
-					case 'r':
-						newColor|=GPIO_PIN_1;
-						break;
-					case 'g':
-						newColor|=GPIO_PIN_3;
-						break;
-					case 'b':
-						newColor|=GPIO_PIN_2;
-						break;
-					case 'c':
-						newColor|=GPIO_PIN_3|GPIO_PIN_2;
-						break;
-					case 'm':
-						newColor|=GPIO_PIN_2|GPIO_PIN_1;
-						break;	
-					case 'a':
-						newColor|=GPIO_PIN_3|GPIO_PIN_1;
-						break;
-					case 'B':
-						newColor=0;
-						break;	
-					case 'W':
-						newColor|=GPIO_PIN_3|GPIO_PIN_2|GPIO_PIN_1;
-						break;
-					default:
-						colorMask=0;
-						break;
-				}
-				if(colorMask) GPIOPinWrite(GPIO_PORTF_BASE, colorMask, newColor);
-			}
+    {	
+		int readVal;
+		if(txReady){
+			adc_capture();
+			((int*)myOutBuffer)[0]=adc_getData();
+			readVal=((int*)myOutBuffer)[0];
+			UARTprintf("adc = %d\n",readVal);
+			txReady=0;
+			USBDBulkPacketWrite(myBulk,myOutBuffer,4,true);
 		}
     }
 }

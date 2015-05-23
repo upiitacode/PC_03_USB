@@ -11,6 +11,7 @@ int main() {
 	int dwlen_in = IN_BUFFER_SIZE;
 	int pdwlen_out;
 	int pdwlen_in;
+	int readVal;
 	libusb_context *ctx = NULL; //context =default
 	libusb_device_handle* myHandle = NULL;
 	int opFailed;
@@ -23,22 +24,13 @@ int main() {
 		if (myHandle != NULL) {
 			printf("device is open. handle = %p\n", myHandle);
 			libusb_claim_interface(myHandle, 0);
-			printf("Enter String: ");
-			fgets(buff_out,OUT_BUFFER_SIZE,stdin);
-			dwlen_out = strlen(buff_out) + 1; //size of string to send
 			//write and read operations
-			opFailed = libusb_bulk_transfer(myHandle, 0x01, (unsigned char *) buff_out, dwlen_out, &pdwlen_out, 1000);
-			if (opFailed == 0) {
-				printf("write success.\n");
-				printf("%d of %d bytes written\n", pdwlen_out, dwlen_out);
-			} else {
-				printf("write failed.\n");
-			}
 			opFailed = libusb_bulk_transfer(myHandle, 0x81,(unsigned char *) buff_in, dwlen_in, &pdwlen_in, 10);
 			if (opFailed == 0) {
 				printf("read success.\n");
 				printf("%d of %d bytes read\n", pdwlen_in, dwlen_in);
-				printf("data: %s\n", buff_in);
+				readVal=(((int *)buff_in)[0]);
+				printf("data: 0x%03X\n", readVal);
 			} else {
 				printf("read failed.\n");
 			}
