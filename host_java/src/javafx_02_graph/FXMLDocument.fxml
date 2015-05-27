@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.chart.*?>
+<?import java.lang.*?>
+<?import java.util.*?>
+<?import javafx.scene.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane id="AnchorPane" prefHeight="262.0" prefWidth="462.0" xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="javafx_02_graph.FXMLDocumentController">
+    <children>
+      <BorderPane prefHeight="200.0" prefWidth="320.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+         <bottom>
+            <AnchorPane prefHeight="29.0" prefWidth="320.0" BorderPane.alignment="CENTER">
+               <children>
+                  <HBox layoutX="160.0" spacing="20.0" AnchorPane.bottomAnchor="10.0" AnchorPane.rightAnchor="10.0">
+                     <children>
+                          <Button fx:id="start_button" layoutX="160.0" onAction="#start_button_handler" text="Start" />
+                        <Button fx:id="stop_button" layoutX="241.0" onAction="#stop_button_handler" text="Stop" />
+                     </children>
+                  </HBox>
+               </children>
+            </AnchorPane>
+         </bottom>
+         <center>
+            <AnchorPane prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+               <children>
+                  <LineChart fx:id="myLineChart" createSymbols="false" prefHeight="400.0" prefWidth="500.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+                    <xAxis>
+                      <NumberAxis fx:id="myAxis_x" animated="false" autoRanging="false" forceZeroInRange="false" side="BOTTOM" tickUnit="1.0" upperBound="5.0" />
+                    </xAxis>
+                    <yAxis>
+                      <NumberAxis fx:id="myAxis_y" animated="false" autoRanging="false" label="Volts" side="LEFT" tickUnit="0.5" upperBound="3.5" visible="false" />
+                    </yAxis>
+                  </LineChart>
+               </children>
+            </AnchorPane>
+         </center>
+      </BorderPane>
+    </children>
+</AnchorPane>
