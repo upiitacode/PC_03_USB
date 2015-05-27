@@ -6,6 +6,7 @@
 package javafx_02_graph;
 
 import java.net.URL;
+import java.nio.IntBuffer;
 import java.util.ResourceBundle;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -38,13 +39,12 @@ public class FXMLDocumentController implements Initializable {
     private volatile boolean run_Thread = false;
     private volatile boolean done_Thread = false;
     private Tiva_USB tiva;
-    
+    private IntBuffer buffer;
     @FXML
     private void start_button_handler(ActionEvent event) {
         if(run_Thread){
-            System.out.println("Thread already running");
+            //Display thread already running warning
         }else{
-            System.out.println("Start!");
             tiva.connect();
             run_Thread=true;
             startTask(); 
@@ -55,16 +55,10 @@ public class FXMLDocumentController implements Initializable {
     private void stop_button_handler(ActionEvent event) {
         if(true == run_Thread){
             run_Thread=false;
-            System.out.println("Stop");
             while(false == done_Thread);
             tiva.disconnect();
         }
         
-    }
-    
-     @FXML
-    private void read_button_handler(ActionEvent event) {
-        System.out.println("read");
     }
 
     @Override
@@ -112,12 +106,13 @@ public class FXMLDocumentController implements Initializable {
     }
 
     public void updatePB() {
-        //pb2.setProgress((coutner/10.0));
-        double y = tiva.read()*(3.3/4095);
-        series.getData().remove(0);
-        series.getData().add(new XYChart.Data(x_index*(DLY_TIME_MS/1000.0), y));
-        x_index += 1;
-        myAxis_x.setLowerBound((x_index-100)*(DLY_TIME_MS/1000.0));
-        myAxis_x.setUpperBound(x_index*(DLY_TIME_MS/1000.0));
+        if(true == run_Thread){
+            double y = tiva.read()*(3.3/4095);
+            series.getData().remove(0);
+            series.getData().add(new XYChart.Data(x_index*(DLY_TIME_MS/1000.0), y));
+            x_index += 1;
+            myAxis_x.setLowerBound((x_index-100)*(DLY_TIME_MS/1000.0));
+            myAxis_x.setUpperBound(x_index*(DLY_TIME_MS/1000.0));   
+        }
     }
 }
